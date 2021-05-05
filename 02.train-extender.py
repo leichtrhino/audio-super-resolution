@@ -1,0 +1,232 @@
+#!/usr/env python
+import sys
+import argparse
+import torch
+
+import datasets
+import models
+import model_settings
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--train-dir', type=str, required=True)
+    parser.add_argument('--validation-dir', type=str)
+    parser.add_argument('--autoencoder', type=str, required=True)
+    parser.add_argument('--epoch', type=int, default=1)
+    parser.add_argument('--batch-size', type=int, default=32)
+    parser.add_argument('--gpu', action='store_true')
+    parser.add_argument('--checkpoint', type=str, default=None)
+    parser.add_argument('output', type=str)
+
+    args = parser.parse_args()
+    if args.gpu:
+        args.device = 'gpu'
+    else:
+        args.device = 'cpu'
+    return args
+
+def build_autoencoder():
+    return models.Autoencoder(
+        out_channel=model_settings.conv_out_channels(),
+        kernel_size=model_settings.conv_kernel_size(),
+        conv_in_channel=model_settings.out_conv_in_channel(),
+        conv_kernel_size=model_settings.out_conv_kernel(),
+        superpixel_rate=2,
+        dropout_p=0.2
+    )
+
+def build_generator():
+    return models.Generator(
+        supersampling_rate=model_settings.supersampling_rate(),
+        out_channel=model_settings.conv_out_channels(),
+        kernel_size=model_settings.conv_kernel_size(),
+        conv_in_channel=model_settings.out_conv_in_channel(),
+        conv_kernel_size=model_settings.out_conv_kernel(),
+        superpixel_rate=2,
+        dropout_p=0.2
+    )
+
+def build_discriminator():
+    return models.Discriminator(
+        input_length=model_settings.sample_segment_length(),
+        out_channel=model_settings.conv_out_channels(),
+        kernel_size=model_settings.conv_kernel_size(),
+        linear_out_features=model_settings.out_linear_features(),
+        superpixel_rate=2,
+        dropout_p=0.2
+    )
+
+def main():
+    args = parse_args()
+
+    # build dataset
+    train_dataset = datasets.Folder(
+        args.train_dir,
+        model_settings.sample_sr(),
+        model_settings.sample_duration()
+    )
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=args.batch_size,
+        shuffle=True
+    )
+
+    if args.validation_dir is not None:
+        validation_dataset = datasets.Folder(
+            args.validation_dir,
+            model_settings.sample_sr(),
+            model_settings.sample_duration()
+        )
+        validation_loader = torch.utils.data.DataLoader(
+            validation_dataset,
+            batch_size=args.batch_size,
+            shuffle=False
+        )
+
+    # build (and load) a model
+    autoencoder = build_autoencoder()
+    autoencoder.load_state_dict(torch.load(args.autoencoder))
+    autoencoder.eval()
+    for p in autoencoder.parameters():
+        p.requires_grad = False
+
+    generator = build_generator()
+    discriminator = build_discriminator()
+    if args.checkpoint:
+        checkpoint = torch.load(args.checkpoint)
+        generator.load_state_dict(checkpoint['generator'])
+        discriminator.load_state_dict(checkpoint['discriminator'])
+    generator.to(args.device)
+    discriminator.to(args.device)
+
+    optimizer_g = torch.optim.Adam(generator.parameters(), 1e-4)
+    optimizer_d = torch.optim.Adam(discriminator.parameters(), 1e-4)
+
+    for epoch in range(1, args.epoch+1):
+        sum_loss_g = 0
+        sum_loss_d = 0
+        total_batch = 0
+        last_output_len = 0
+
+        # train
+        autoencoder.train()
+        for step, batch in enumerate(train_loader, 1):
+            # obtain batch
+            x_h = batch.to(args.device)
+            x_l = x_h[:, ::model_settings.supersampling_rate()]
+            total_batch += x_h.shape[0]
+
+            # train discriminator
+            discriminator.train()
+            for p in discriminator.parameters():
+                p.requires_grad = True
+            optimizer_d.zero_grad()
+            generator.eval()
+            for p in generator.parameters():
+                p.requires_grad = False
+
+            x_h_hat = generator(x_l)
+            p_x_h = discriminator(x_h)
+            p_x_h_hat = discriminator(x_h_hat)
+
+            loss_d = torch.sum(
+                -torch.log(p_x_h.clamp(min=1e-5))
+                -torch.log((1-p_x_h_hat).clamp(min=1e-5))
+            ) / x_h.shape[0]
+            sum_loss_d += loss_d.item() * x_h.shape[0]
+            loss_d.backward()
+            optimizer_d.step()
+
+            # train generator
+            generator.train()
+            for p in generator.parameters():
+                p.requires_grad = True
+            optimizer_g.zero_grad()
+            discriminator.eval()
+            for p in discriminator.parameters():
+                p.requires_grad = False
+
+            x_h_hat = generator(x_l)
+            p_x_h_hat = discriminator(x_h_hat)
+            f_x_h = autoencoder.encoder(x_h)
+            f_x_h_hat = autoencoder.encoder(x_h_hat)
+
+            loss_g = (
+                torch.sum((x_h - x_h_hat) ** 2) / x_h.shape[-1] \
+                + 1.0 * torch.sum((f_x_h - f_x_h_hat) ** 2) \
+                / (f_x_h.shape[1] * f_x_h.shape[2]) \
+                + 0.001 * torch.sum(-torch.log(p_x_h_hat.clamp(min=1e-5)))
+            ) / x_h.shape[0]
+            sum_loss_g = loss_g.item() * x_h.shape[0]
+            loss_g.backward()
+            optimizer_g.step()
+
+            # print learning statistics
+            print_step = step
+            curr_output = (f'\repoch {epoch} step {print_step} '
+                           f'loss_g={sum_loss_g / total_batch} '
+                           f'loss_d={sum_loss_d / total_batch}')
+            sys.stdout.write('\r' + ' ' * last_output_len)
+            sys.stdout.write(curr_output)
+            sys.stdout.flush()
+            last_output_len = len(curr_output)
+
+        if args.validation_dir is None:
+            sys.stdout.write('\n')
+            continue
+
+        # validation
+        generator.eval()
+        discriminator.eval()
+        with torch.no_grad():
+            sum_val_loss_g = 0
+            sum_val_loss_d = 0
+            total_val_batch = 0
+
+            for x in validation_loader:
+                # obtain batch
+                x_h = batch.to(args.device)
+                x_l = x_h[:, ::model_settings.supersampling_rate()]
+                x_h_hat = generator(x_l)
+
+                p_x_h = discriminator(x_h)
+                p_x_h_hat = discriminator(x_h_hat)
+                f_x_h = autoencoder.encoder(x_h)
+                f_x_h_hat = autoencoder.encoder(x_h_hat)
+
+                total_val_batch += x_h.shape[0]
+
+                # eval discriminator
+                loss_d = torch.sum(
+                    -torch.log(p_x_h.clamp(min=1e-5))
+                    -torch.log((1-p_x_h_hat).clamp(min=1e-5))
+                )
+                sum_val_loss_d += loss_d.item()
+
+                # eval generator
+                loss_g = (
+                    torch.sum((x_h - x_h_hat) ** 2) / x_h.shape[-1] \
+                    + 1.0 * torch.sum((f_x_h - f_x_h_hat) ** 2) \
+                    / (f_x_h.shape[1] * f_x_h.shape[2]) \
+                    + 0.001 * torch.sum(-torch.log(p_x_h_hat.clamp(min=1e-5)))
+                )
+                sum_val_loss_g = loss_g.item()
+
+        # print learning statistics
+        sys.stdout.write('\r' + ' ' * last_output_len)
+        sys.stdout.write(f'\repoch {epoch} '
+                         f'loss_g={sum_loss_g / total_batch} '
+                         f'loss_d={sum_loss_d / total_batch} '
+                         f'val_g={sum_val_loss_g / total_val_batch} '
+                         f'val_d={sum_val_loss_d / total_val_batch}\n')
+
+    generator.to('cpu')
+    discriminator.to('cpu')
+    torch.save({
+        'generator': generator.state_dict(),
+        'discriminator': discriminator.state_dict(),
+    }, args.output)
+
+if __name__ == '__main__':
+    main()
+
