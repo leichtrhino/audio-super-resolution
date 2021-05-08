@@ -19,7 +19,7 @@ def parse_args():
 
     args = parser.parse_args()
     if args.gpu:
-        args.device = 'gpu'
+        args.device = 'cuda'
     else:
         args.device = 'cpu'
     return args
@@ -81,12 +81,12 @@ def main():
         for step, batch in enumerate(train_loader, 1):
             # obtain batch and infer then get loss
             x = batch.to(args.device)
-            x_hat = autoencoder(batch)
+            x_hat = autoencoder(x)
             loss = loss_function(x, x_hat)
 
             # obtain training informationn
             sum_loss += loss.item() * x.shape[0]
-            total_batch += batch.shape[0]
+            total_batch += x.shape[0]
             ave_loss = sum_loss / total_batch
 
             # perform a backward pass
@@ -119,8 +119,8 @@ def main():
                 loss = loss_function(x, x_hat)
 
                 # update training statistics
-                sum_val_loss += loss.item() * batch.shape[0]
-                total_batch += batch.shape[0]
+                sum_val_loss += loss.item() * x.shape[0]
+                total_batch += x.shape[0]
 
         ave_val_loss = sum_val_loss / total_batch
         sys.stdout.write('\r' + ' ' * last_output_len)

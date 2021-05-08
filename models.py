@@ -24,9 +24,10 @@ class Spline(torch.nn.Module):
         )
 
         if len(x.shape) == 1:
-            return torch.Tensor(t(x.numpy()))
+            return torch.Tensor(t(x.cpu().numpy())).to(x.device)
 
-        return torch.stack([torch.Tensor(t(z)) for z in x.numpy()])
+        return torch.stack([torch.Tensor(t(z)) for z in x.cpu().numpy()])\
+            .to(x.device)
 
 class Subpixel(torch.nn.Module):
     def __init__(self, r_subpixel : int) -> None:

@@ -20,7 +20,7 @@ def parse_args():
 
     args = parser.parse_args()
     if args.gpu:
-        args.device = 'gpu'
+        args.device = 'cuda'
     else:
         args.device = 'cpu'
     return args
@@ -89,6 +89,7 @@ def main():
     autoencoder.eval()
     for p in autoencoder.parameters():
         p.requires_grad = False
+    autoencoder.to(args.device)
 
     generator = build_generator()
     discriminator = build_discriminator()
