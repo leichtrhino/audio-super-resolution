@@ -5,12 +5,11 @@ def supersampling_rate():
     return 2
 
 def conv_kernel_size():
-    #return [3, 9, 27, 81]
-    return [3, 9]
+    return [3, 9, 27, 81]
 
 def conv_out_channels():
-    #return [64, 128, 256, 512]
-    return [8, 16, 32, 32]
+    #return [16, 32, 64, 128]
+    return [8, 16, 32, 64]
 
 def out_conv_in_channel():
     return 32
