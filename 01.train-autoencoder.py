@@ -13,6 +13,7 @@ def parse_args():
     parser.add_argument('--validation-dir', type=str)
     parser.add_argument('--epoch', type=int, default=1)
     parser.add_argument('--batch-size', type=int, default=32)
+    parser.add_argument('--compute-batch-size', type=int, default=None)
     parser.add_argument('--gpu', action='store_true')
     parser.add_argument('--checkpoint', type=str, default=None)
     parser.add_argument('output', type=str)
@@ -22,6 +23,8 @@ def parse_args():
         args.device = 'cuda'
     else:
         args.device = 'cpu'
+    if args.compute_batch_size is None:
+        args.compute_batch_size = args.batch_size
     return args
 
 def build_model():
@@ -79,20 +82,26 @@ def main():
         # train
         autoencoder.train()
         for step, batch in enumerate(train_loader, 1):
-            # obtain batch and infer then get loss
-            x = batch.to(args.device)
-            x_hat = autoencoder(x)
-            loss = loss_function(x, x_hat)
 
-            # obtain training informationn
-            sum_loss += loss.item() * x.shape[0]
-            total_batch += x.shape[0]
-            ave_loss = sum_loss / total_batch
-
-            # perform a backward pass
-            loss.backward()
-            optimizer.step()
             optimizer.zero_grad()
+            for sample_i in range(0, batch.shape[0], args.compute_batch_size):
+                # obtain batch and infer then get loss
+                sample_i_end = min(
+                    sample_i + args.compute_batch_size, batch.shape[0])
+                x = batch[sample_i:sample_i_end].to(args.device)
+                x_hat = autoencoder(x)
+                loss = loss_function(x, x_hat)
+
+                # obtain training informationn
+                sum_loss += loss.item() * x.shape[0]
+                total_batch += x.shape[0]
+                ave_loss = sum_loss / total_batch
+
+                # perform a backward pass
+                loss *= (sample_i_end - sample_i) / batch.shape[0]
+                loss.backward()
+
+            optimizer.step()
 
             # print learning statistics
             print_step = step
