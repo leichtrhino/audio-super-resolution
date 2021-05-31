@@ -123,7 +123,7 @@ class UpsamplingBlock(torch.nn.Module):
 
         self.multiscale_conv = MultiscaleConv(
             in_channels, out_channels_per_conv, kernel_size)
-        self.dropout = torch.nn.Dropout2d(p=p_dropout)
+        self.dropout = torch.nn.Dropout(p=p_dropout)
         self.prelu = torch.nn.PReLU(init=0.2)
         self.subpixel = Subpixel(r_subpixel)
 
@@ -327,7 +327,7 @@ class Discriminator(torch.nn.Module):
             self.multiscale_conv = MultiscaleConv(
                 in_channels, out_channels_per_conv, kernel_size)
             self.batchnorm = torch.nn.BatchNorm1d(out_channels // r_superpixel)
-            self.dropout = torch.nn.Dropout2d(p=p_dropout)
+            self.dropout = torch.nn.Dropout(p=p_dropout)
             self.leakyrelu = torch.nn.LeakyReLU()
             self.superpixel = Superpixel(r_superpixel)
 
@@ -369,7 +369,7 @@ class Discriminator(torch.nn.Module):
 
         self.linear_1 = torch.nn.Linear(
             downsampling_length * out_channel[-1], linear_out_features)
-        self.dropout = torch.nn.Dropout2d(p=dropout_p)
+        self.dropout = torch.nn.Dropout(p=dropout_p)
         self.leakyrelu_2 = torch.nn.LeakyReLU(0.2)
 
         self.linear_2 = torch.nn.Linear(linear_out_features, 1)
