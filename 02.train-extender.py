@@ -111,7 +111,6 @@ def main():
         sum_loss_d = 0
         total_batch = 0
         last_output_len = 0
-
         # train
         autoencoder.train()
         for step, batch in enumerate(train_loader, 1):
@@ -141,8 +140,8 @@ def main():
                 p_x_h_hat = discriminator(x_h_hat)
 
                 loss_d = torch.sum(
-                    -torch.log(p_x_h.clamp(min=1e-5))
-                    -torch.log((1-p_x_h_hat).clamp(min=1e-5))
+                    -torch.log(p_x_h.clamp(min=1e-32))
+                    -torch.log((1-p_x_h_hat).clamp(min=1e-32))
                 ) / x_h.shape[0]
                 sum_loss_d += loss_d.item() * x_h.shape[0]
 
@@ -166,7 +165,7 @@ def main():
                     sample_i + args.compute_batch_size, batch.shape[0])
                 x_h = batch[sample_i:sample_i_end].to(args.device)
                 x_l = x_h[:, ::model_settings.supersampling_rate()]
-                x_h_hat = generator(x_l)
+                x_h_hat = generator(x_l)[:, :x_h.shape[-1]]
                 p_x_h_hat = discriminator(x_h_hat)
                 f_x_h = autoencoder.encoder(x_h)
                 f_x_h_hat = autoencoder.encoder(x_h_hat)
@@ -175,7 +174,7 @@ def main():
                     torch.sum((x_h - x_h_hat) ** 2) / x_h.shape[-1] \
                     + 1.0 * torch.sum((f_x_h - f_x_h_hat) ** 2) \
                     / (f_x_h.shape[1] * f_x_h.shape[2]) \
-                    + 0.001 * torch.sum(-torch.log(p_x_h_hat.clamp(min=1e-5)))
+                    + 0.001 * torch.sum(-torch.log(p_x_h_hat.clamp(min=1e-32)))
                 ) / x_h.shape[0]
                 sum_loss_g = loss_g.item() * x_h.shape[0]
 
@@ -206,23 +205,23 @@ def main():
             sum_val_loss_d = 0
             total_val_batch = 0
 
-            for x in validation_loader:
+            for batch in validation_loader:
                 # obtain batch
                 x_h = batch.to(args.device)
                 x_l = x_h[:, ::model_settings.supersampling_rate()]
-                x_h_hat = generator(x_l)
+                x_h_hat = generator(x_l)[:, :x_h.shape[-1]]
 
                 p_x_h = discriminator(x_h)
                 p_x_h_hat = discriminator(x_h_hat)
                 f_x_h = autoencoder.encoder(x_h)
                 f_x_h_hat = autoencoder.encoder(x_h_hat)
 
-                total_val_batch += x_h.shape[0]
+                total_val_batch += batch.shape[0]
 
                 # eval discriminator
                 loss_d = torch.sum(
-                    -torch.log(p_x_h.clamp(min=1e-5))
-                    -torch.log((1-p_x_h_hat).clamp(min=1e-5))
+                    -torch.log(p_x_h.clamp(min=1e-32))
+                    -torch.log((1-p_x_h_hat).clamp(min=1e-32))
                 )
                 sum_val_loss_d += loss_d.item()
 
@@ -231,7 +230,7 @@ def main():
                     torch.sum((x_h - x_h_hat) ** 2) / x_h.shape[-1] \
                     + 1.0 * torch.sum((f_x_h - f_x_h_hat) ** 2) \
                     / (f_x_h.shape[1] * f_x_h.shape[2]) \
-                    + 0.001 * torch.sum(-torch.log(p_x_h_hat.clamp(min=1e-5)))
+                    + 0.001 * torch.sum(-torch.log(p_x_h_hat.clamp(min=1e-32)))
                 )
                 sum_val_loss_g = loss_g.item()
 
