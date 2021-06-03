@@ -112,7 +112,6 @@ def main():
         total_batch = 0
         last_output_len = 0
         # train
-        autoencoder.train()
         for step, batch in enumerate(train_loader, 1):
             # obtain batch
             x_h = batch.to(args.device)
@@ -200,39 +199,39 @@ def main():
         # validation
         generator.eval()
         discriminator.eval()
-        with torch.no_grad():
-            sum_val_loss_g = 0
-            sum_val_loss_d = 0
-            total_val_batch = 0
+        sum_val_loss_g = 0
+        sum_val_loss_d = 0
+        total_val_batch = 0
 
-            for batch in validation_loader:
-                # obtain batch
-                x_h = batch.to(args.device)
-                x_l = x_h[:, ::model_settings.supersampling_rate()]
+        for batch in validation_loader:
+            # obtain batch
+            x_h = batch.to(args.device)
+            x_l = x_h[:, ::model_settings.supersampling_rate()]
+
+            with torch.no_grad():
                 x_h_hat = generator(x_l)[:, :x_h.shape[-1]]
-
                 p_x_h = discriminator(x_h)
                 p_x_h_hat = discriminator(x_h_hat)
                 f_x_h = autoencoder.encoder(x_h)
                 f_x_h_hat = autoencoder.encoder(x_h_hat)
 
-                total_val_batch += batch.shape[0]
+            total_val_batch += batch.shape[0]
 
-                # eval discriminator
-                loss_d = torch.sum(
-                    -torch.log(p_x_h.clamp(min=1e-32))
-                    -torch.log((1-p_x_h_hat).clamp(min=1e-32))
-                )
-                sum_val_loss_d += loss_d.item()
+            # eval discriminator
+            loss_d = torch.sum(
+                -torch.log(p_x_h.clamp(min=1e-32))
+                -torch.log((1-p_x_h_hat).clamp(min=1e-32))
+            )
+            sum_val_loss_d += loss_d.item()
 
-                # eval generator
-                loss_g = (
-                    torch.sum((x_h - x_h_hat) ** 2) / x_h.shape[-1] \
-                    + 1.0 * torch.sum((f_x_h - f_x_h_hat) ** 2) \
-                    / (f_x_h.shape[1] * f_x_h.shape[2]) \
-                    + 0.001 * torch.sum(-torch.log(p_x_h_hat.clamp(min=1e-32)))
-                )
-                sum_val_loss_g = loss_g.item()
+            # eval generator
+            loss_g = (
+                torch.sum((x_h - x_h_hat) ** 2) / x_h.shape[-1] \
+                + 1.0 * torch.sum((f_x_h - f_x_h_hat) ** 2) \
+                / (f_x_h.shape[1] * f_x_h.shape[2]) \
+                + 0.001 * torch.sum(-torch.log(p_x_h_hat.clamp(min=1e-32)))
+            )
+            sum_val_loss_g = loss_g.item()
 
         # print learning statistics
         sys.stdout.write('\r' + ' ' * last_output_len)
