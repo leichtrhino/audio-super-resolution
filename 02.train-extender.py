@@ -175,7 +175,7 @@ def main():
                     / (f_x_h.shape[1] * f_x_h.shape[2]) \
                     + 0.001 * torch.sum(-torch.log(p_x_h_hat.clamp(min=1e-32)))
                 ) / x_h.shape[0]
-                sum_loss_g = loss_g.item() * x_h.shape[0]
+                sum_loss_g += loss_g.item() * x_h.shape[0]
 
                 loss_g *= (sample_i_end - sample_i) / batch.shape[0]
                 loss_g.backward()
@@ -231,7 +231,7 @@ def main():
                 / (f_x_h.shape[1] * f_x_h.shape[2]) \
                 + 0.001 * torch.sum(-torch.log(p_x_h_hat.clamp(min=1e-32)))
             )
-            sum_val_loss_g = loss_g.item()
+            sum_val_loss_g += loss_g.item()
 
         # print learning statistics
         sys.stdout.write('\r' + ' ' * last_output_len)
