@@ -367,6 +367,11 @@ class Discriminator(torch.nn.Module):
         downsampling_length = ceil(
             input_length / superpixel_rate**(len(out_channel)-1))
 
+        # The original paper suggests to use extra linear layer
+        # instead of global max pooling.
+        # This implementation uses global max pooling due to the
+        # limitation of GPU VRAM memory.
+        """
         self.linear_1 = torch.nn.Linear(
             downsampling_length * out_channel[-1], linear_out_features)
         self.dropout = torch.nn.Dropout(p=dropout_p)
@@ -374,6 +379,11 @@ class Discriminator(torch.nn.Module):
 
         self.linear_2 = torch.nn.Linear(linear_out_features, 1)
         self.sigmoid = torch.nn.Sigmoid()
+        """
+
+        self.linear = torch.nn.Linear(out_channel[-1], 1)
+        self.sigmoid = torch.nn.Sigmoid()
+
 
     def forward(self, x : torch.Tensor) -> torch.Tensor:
         downsample_out = x.unsqueeze(1)
@@ -383,8 +393,13 @@ class Discriminator(torch.nn.Module):
         for d in self.downsampling_blocks:
             downsample_out = d(downsample_out)
 
+        """
         linear_out = self.leakyrelu_2(self.dropout(
             self.linear_1(downsample_out.flatten(start_dim=1))))
 
         return self.sigmoid(self.linear_2(linear_out)).squeeze(1)
+        """
+
+        linear_out = self.linear(downsample_out.mean(dim=-1))
+        return self.sigmoid(linear_out)
 
