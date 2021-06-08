@@ -22,7 +22,7 @@ def parse_args():
 def build_generator():
     return models.Generator(
         supersampling_rate=model_settings.supersampling_rate(),
-        out_channel=model_settings.conv_out_channels(),
+        out_channel=model_settings.conv_out_channels(layer=8),
         kernel_size=model_settings.conv_kernel_size(),
         conv_in_channel=model_settings.out_conv_in_channel(),
         conv_kernel_size=model_settings.out_conv_kernel(),

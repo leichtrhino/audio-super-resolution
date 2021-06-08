@@ -29,7 +29,7 @@ def parse_args():
 
 def build_model():
     return models.Autoencoder(
-        out_channel=model_settings.conv_out_channels(),
+        out_channel=model_settings.conv_out_channels(layer=4),
         kernel_size=model_settings.conv_kernel_size(),
         conv_in_channel=model_settings.out_conv_in_channel(),
         conv_kernel_size=model_settings.out_conv_kernel(),

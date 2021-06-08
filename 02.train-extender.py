@@ -30,7 +30,7 @@ def parse_args():
 
 def build_autoencoder():
     return models.Autoencoder(
-        out_channel=model_settings.conv_out_channels(),
+        out_channel=model_settings.conv_out_channels(layer=4),
         kernel_size=model_settings.conv_kernel_size(),
         conv_in_channel=model_settings.out_conv_in_channel(),
         conv_kernel_size=model_settings.out_conv_kernel(),
@@ -41,7 +41,7 @@ def build_autoencoder():
 def build_generator():
     return models.Generator(
         supersampling_rate=model_settings.supersampling_rate(),
-        out_channel=model_settings.conv_out_channels(),
+        out_channel=model_settings.conv_out_channels(layer=8),
         kernel_size=model_settings.conv_kernel_size(),
         conv_in_channel=model_settings.out_conv_in_channel(),
         conv_kernel_size=model_settings.out_conv_kernel(),
@@ -52,7 +52,7 @@ def build_generator():
 def build_discriminator():
     return models.Discriminator(
         input_length=model_settings.sample_segment_length(),
-        out_channel=model_settings.conv_out_channels(),
+        out_channel=model_settings.conv_out_channels(layer=8),
         kernel_size=model_settings.conv_kernel_size(),
         linear_out_features=model_settings.out_linear_features(),
         superpixel_rate=2,
