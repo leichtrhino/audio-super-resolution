@@ -1,6 +1,7 @@
 #!/usr/env python
 import sys
 import argparse
+import resampy
 import torch
 
 import datasets
@@ -112,27 +113,33 @@ def main():
         total_batch = 0
         last_output_len = 0
         # train
+        discriminator.train()
+        generator.train()
+
         for step, batch in enumerate(train_loader, 1):
             # obtain batch
-            x_h = batch.to(args.device)
-            x_l = x_h[:, ::model_settings.supersampling_rate()]
             total_batch += batch.shape[0]
 
             # train discriminator
-            discriminator.train()
             for p in discriminator.parameters():
                 p.requires_grad = True
-            optimizer_d.zero_grad()
-            generator.eval()
             for p in generator.parameters():
                 p.requires_grad = False
+            optimizer_d.zero_grad()
 
             # obtain batch and infer then get loss
             for sample_i in range(0, batch.shape[0], args.compute_batch_size):
                 sample_i_end = min(
                     sample_i + args.compute_batch_size, batch.shape[0])
-                x_h = batch[sample_i:sample_i_end].to(args.device)
-                x_l = x_h[:, ::model_settings.supersampling_rate()]
+                x_h = batch[sample_i:sample_i_end]
+                x_l = torch.Tensor(resampy.resample(
+                    x_h.numpy(),
+                    model_settings.sample_sr(),
+                    model_settings.sample_sr()
+                    // model_settings.supersampling_rate(),
+                    axis=-1
+                )).to(args.device)
+                x_h = x_h.to(args.device)
 
                 x_h_hat = generator(x_l)
                 p_x_h = discriminator(x_h)
@@ -150,20 +157,27 @@ def main():
             optimizer_d.step()
 
             # train generator
-            generator.train()
             for p in generator.parameters():
                 p.requires_grad = True
-            optimizer_g.zero_grad()
-            discriminator.eval()
             for p in discriminator.parameters():
                 p.requires_grad = False
+            optimizer_g.zero_grad()
 
             # obtain batch and infer then get loss
             for sample_i in range(0, batch.shape[0], args.compute_batch_size):
                 sample_i_end = min(
                     sample_i + args.compute_batch_size, batch.shape[0])
-                x_h = batch[sample_i:sample_i_end].to(args.device)
-                x_l = x_h[:, ::model_settings.supersampling_rate()]
+                x_h = batch[sample_i:sample_i_end]
+                #x_l = x_h[:, ::model_settings.supersampling_rate()]
+                x_l = torch.Tensor(resampy.resample(
+                    x_h.numpy(),
+                    model_settings.sample_sr(),
+                    model_settings.sample_sr()
+                    // model_settings.supersampling_rate(),
+                    axis=-1
+                )).to(args.device)
+                x_h = x_h.to(args.device)
+
                 x_h_hat = generator(x_l)[:, :x_h.shape[-1]]
                 p_x_h_hat = discriminator(x_h_hat)
                 f_x_h = autoencoder.encoder(x_h)
@@ -205,8 +219,15 @@ def main():
 
         for batch in validation_loader:
             # obtain batch
-            x_h = batch.to(args.device)
-            x_l = x_h[:, ::model_settings.supersampling_rate()]
+            x_h = batch
+            x_l = torch.Tensor(resampy.resample(
+                x_h.numpy(),
+                model_settings.sample_sr(),
+                model_settings.sample_sr()
+                // model_settings.supersampling_rate(),
+                axis=-1
+            )).to(args.device)
+            x_h = x_h.to(args.device)
 
             with torch.no_grad():
                 x_h_hat = generator(x_l)[:, :x_h.shape[-1]]
