@@ -46,7 +46,7 @@ def main():
         model_settings.sample_sr() // model_settings.supersampling_rate(),
         axis=-1
     ))
-    orig_length = x_l.shape[-1]
+    orig_length = x.shape[-1]
     sample_num = math.ceil(
         x_l.shape[-1] / model_settings.sample_segment_length())
 
