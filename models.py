@@ -400,6 +400,6 @@ class Discriminator(torch.nn.Module):
         return self.sigmoid(self.linear_2(linear_out)).squeeze(1)
         """
 
-        linear_out = self.linear(downsample_out.mean(dim=-1))
+        linear_out = self.linear(downsample_out.max(dim=-1)[0])
         return self.sigmoid(linear_out)
 
