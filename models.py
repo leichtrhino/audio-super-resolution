@@ -370,7 +370,7 @@ class Discriminator(torch.nn.Module):
         # The original paper suggests to use extra linear layer
         # instead of global max pooling.
         # This implementation uses global max pooling due to the
-        # limitation of GPU VRAM memory.
+        # limitation of GPU VRAM.
         """
         self.linear_1 = torch.nn.Linear(
             downsampling_length * out_channel[-1], linear_out_features)
