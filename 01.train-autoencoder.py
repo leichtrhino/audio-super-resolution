@@ -49,7 +49,8 @@ def main():
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=args.batch_size,
-        shuffle=True
+        shuffle=True,
+        num_workers=4,
     )
 
     if args.validation_dir is not None:
@@ -60,8 +61,9 @@ def main():
         )
         validation_loader = torch.utils.data.DataLoader(
             validation_dataset,
-            batch_size=args.batch_size,
-            shuffle=False
+            batch_size=args.compute_batch_size,
+            shuffle=False,
+            num_workers=4,
         )
 
     # build (and load) a model
