@@ -68,12 +68,20 @@ def main():
 
     # build (and load) a model
     autoencoder = build_model()
+    optimizer = torch.optim.Adam(autoencoder.parameters(), 1e-4)
     if args.checkpoint:
-        autoencoder.load_state_dict(torch.load(args.checkpoint))
+        checkpoint = torch.load(args.checkpoint)
+        autoencoder.load_state_dict(checkpoint['model'])
+        if 'optimizer' in checkpoint:
+            optimizer.load_state_dict(checkpoint['optimizer'])
+
     autoencoder.to(args.device)
+    for state in optimizer.state.values():
+        for k, v in state.items():
+            if type(v) == torch.Tensor:
+                state[k] = v.to(args.device)
 
     loss_function = torch.nn.MSELoss()
-    optimizer = torch.optim.Adam(autoencoder.parameters(), 1e-4)
 
     for epoch in range(1, args.epoch+1):
         sum_loss = 0
@@ -138,7 +146,15 @@ def main():
         sys.stdout.write(f'\repoch {epoch} loss={ave_loss} val={ave_val_loss}\n')
 
     autoencoder.to('cpu')
-    torch.save(autoencoder.state_dict(), args.output)
+    for state in optimizer.state.values():
+        for k, v in state.items():
+            if type(v) == torch.Tensor:
+                state[k] = v.to('cpu')
+
+    torch.save({
+        'model': autoencoder.state_dict(),
+        'optimizer': optimizer.state_dict(),
+    }, args.output)
 
 if __name__ == '__main__':
     main()

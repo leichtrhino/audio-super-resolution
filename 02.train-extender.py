@@ -91,7 +91,7 @@ def main():
 
     # build (and load) a model
     autoencoder = build_autoencoder()
-    autoencoder.load_state_dict(torch.load(args.autoencoder))
+    autoencoder.load_state_dict(torch.load(args.autoencoder)['model'])
     autoencoder.eval()
     for p in autoencoder.parameters():
         p.requires_grad = False
@@ -99,15 +99,28 @@ def main():
 
     generator = build_generator()
     discriminator = build_discriminator()
+    optimizer_g = torch.optim.Adam(generator.parameters(), 1e-4)
+    optimizer_d = torch.optim.Adam(discriminator.parameters(), 1e-4)
+
     if args.checkpoint:
         checkpoint = torch.load(args.checkpoint)
         generator.load_state_dict(checkpoint['generator'])
+        if 'generator_optimizer':
+            optimizer_g.load_state_dict(checkpoint['generator_optimizer'])
         discriminator.load_state_dict(checkpoint['discriminator'])
-    generator.to(args.device)
-    discriminator.to(args.device)
+        if 'discriminator_optimizer':
+            optimizer_d.load_state_dict(checkpoint['discriminator_optimizer'])
 
-    optimizer_g = torch.optim.Adam(generator.parameters(), 1e-4)
-    optimizer_d = torch.optim.Adam(discriminator.parameters(), 1e-4)
+    generator.to(args.device)
+    for state in optimizer_g.state.values():
+        for k, v in state.items():
+            if type(v) == torch.Tensor:
+                state[k] = v.to(args.device)
+    discriminator.to(args.device)
+    for state in optimizer_d.state.values():
+        for k, v in state.items():
+            if type(v) == torch.Tensor:
+                state[k] = v.to(args.device)
 
     for epoch in range(1, args.epoch+1):
         sum_loss_g = 0
@@ -266,9 +279,20 @@ def main():
 
     generator.to('cpu')
     discriminator.to('cpu')
+    for state in optimizer_g.state.values():
+        for k, v in state.items():
+            if type(v) == torch.Tensor:
+                state[k] = v.to('cpu')
+    for state in optimizer_d.state.values():
+        for k, v in state.items():
+            if type(v) == torch.Tensor:
+                state[k] = v.to('cpu')
+
     torch.save({
         'generator': generator.state_dict(),
+        'generator_optimizer': optimizer_g.state_dict(),
         'discriminator': discriminator.state_dict(),
+        'discriminator_optimizer': optimizer_d.state_dict(),
     }, args.output)
 
 if __name__ == '__main__':
