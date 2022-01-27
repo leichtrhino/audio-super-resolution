@@ -169,6 +169,7 @@ def main():
                 loss_d *= (sample_i_end - sample_i) / batch.shape[0]
                 loss_d.backward()
 
+            torch.nn.utils.clip_grad_norm_(discriminator.parameters(), 1e4)
             optimizer_d.step()
 
             # train generator
@@ -209,6 +210,7 @@ def main():
                 loss_g *= (sample_i_end - sample_i) / batch.shape[0]
                 loss_g.backward()
 
+            torch.nn.utils.clip_grad_norm_(generator.parameters(), 1e4)
             optimizer_g.step()
 
             # print learning statistics

@@ -111,6 +111,8 @@ def main():
                 loss *= (sample_i_end - sample_i) / batch.shape[0]
                 loss.backward()
 
+            torch.nn.utils.clip_grad_norm_(autoencoder.parameters(), 1e4)
+
             optimizer.step()
 
             # print learning statistics
