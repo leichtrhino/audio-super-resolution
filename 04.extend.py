@@ -32,7 +32,7 @@ def build_generator():
         conv_in_channel=model_settings.out_conv_in_channel(),
         conv_kernel_size=model_settings.out_conv_kernel(),
         superpixel_rate=2,
-        dropout_p=0.2
+        dropout_p=0.5
     )
 
 def main():

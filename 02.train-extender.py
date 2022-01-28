@@ -47,7 +47,7 @@ def build_generator():
         conv_in_channel=model_settings.out_conv_in_channel(),
         conv_kernel_size=model_settings.out_conv_kernel(),
         superpixel_rate=2,
-        dropout_p=0.2
+        dropout_p=0.5
     )
 
 def build_discriminator():
@@ -57,7 +57,7 @@ def build_discriminator():
         kernel_size=model_settings.conv_kernel_size(),
         linear_out_features=model_settings.out_linear_features(),
         superpixel_rate=2,
-        dropout_p=0.2
+        dropout_p=0.5
     )
 
 def main():
