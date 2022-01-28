@@ -40,9 +40,16 @@ def main():
 
     # load audio file
     x, orig_sr = torchaudio.load(args.input)
-    x_l = torch.Tensor(resampy.resample(
+    x = torch.Tensor(resampy.resample(
         x.numpy(),
         orig_sr,
+        model_settings.sample_sr(),
+        axis=-1
+    ))
+    orig_length = x.shape[-1]
+    x_l = torch.Tensor(resampy.resample(
+        x.numpy(),
+        model_settings.sample_sr(),
         model_settings.sample_sr() // model_settings.supersampling_rate(),
         axis=-1
     ))
