@@ -62,11 +62,15 @@ class MultiscaleConv(torch.nn.Module):
     def __init__(
             self,
             in_channels : int,
-            out_channels_per_conv : int,
+            out_channels : int,
             kernel_size : List[int]
     ) -> None:
 
         super(MultiscaleConv, self).__init__()
+        assert out_channels % len(kernel_size) == 0
+        assert all(k % 2 == 1 for k in kernel_size)
+
+        out_channels_per_conv = out_channels // len(kernel_size)
         self.conv_layers = torch.nn.ModuleList([
             torch.nn.Conv1d(
                 in_channels,
@@ -90,12 +94,10 @@ class DownsamplingBlock(torch.nn.Module):
     ) -> None:
 
         super(DownsamplingBlock, self).__init__()
-        assert out_channels % (len(kernel_size) * r_superpixel) == 0
-        out_channels_per_conv \
-            = out_channels // (len(kernel_size) * r_superpixel)
+        assert out_channels * r_superpixel % len(kernel_size) == 0
 
         self.multiscale_conv = MultiscaleConv(
-            in_channels, out_channels_per_conv, kernel_size)
+            in_channels, out_channels, kernel_size)
         self.prelu = torch.nn.PReLU(init=0.2)
         self.superpixel = Superpixel(r_superpixel)
 
@@ -117,12 +119,10 @@ class UpsamplingBlock(torch.nn.Module):
     ) -> None:
 
         super(UpsamplingBlock, self).__init__()
-        assert (out_channels * r_subpixel) % len(kernel_size) == 0
-        out_channels_per_conv \
-            = (out_channels * r_subpixel) // len(kernel_size)
+        assert out_channels % (len(kernel_size) * r_subpixel) == 0
 
         self.multiscale_conv = MultiscaleConv(
-            in_channels, out_channels_per_conv, kernel_size)
+            in_channels, out_channels, kernel_size)
         self.dropout = torch.nn.Dropout(p=p_dropout)
         self.prelu = torch.nn.PReLU(init=0.2)
         self.subpixel = Subpixel(r_subpixel)
@@ -146,12 +146,13 @@ class Autoencoder(torch.nn.Module):
             super(Autoencoder.Encoder, self).__init__()
             self.downsampling_blocks = torch.nn.ModuleList([
                 DownsamplingBlock(
-                    in_channels=in_c,
+                    in_channels=in_c if block_i == 0 else in_c * superpixel_rate,
                     out_channels=out_c,
                     kernel_size=kernel_size,
                     r_superpixel=superpixel_rate
                 )
-                for in_c, out_c in zip([1]+out_channel, out_channel)
+                for block_i, (in_c, out_c) in enumerate(
+                        zip([1]+out_channel, out_channel))
             ])
 
         def forward(self, x : torch.Tensor) -> torch.Tensor:
@@ -176,7 +177,7 @@ class Autoencoder(torch.nn.Module):
 
             self.upsampling_blocks = torch.nn.ModuleList([
                 UpsamplingBlock(
-                    in_channels=in_c,
+                    in_channels=in_c * superpixel_rate if block_i == 0 else in_c // superpixel_rate,
                     out_channels=out_c,
                     kernel_size=kernel_size,
                     r_subpixel=superpixel_rate,
@@ -189,7 +190,7 @@ class Autoencoder(torch.nn.Module):
             ])
 
             self.conv = torch.nn.Conv1d(
-                conv_in_channel,
+                conv_in_channel // superpixel_rate,
                 1,
                 conv_kernel_size,
                 padding=(conv_kernel_size-1) // 2
@@ -252,12 +253,13 @@ class Generator(torch.nn.Module):
         self.spline = Spline(supersampling_rate)
         self.downsampling_blocks = torch.nn.ModuleList([
             DownsamplingBlock(
-                in_channels=in_c,
+                in_channels=in_c if block_i == 0 else in_c * superpixel_rate,
                 out_channels=out_c,
                 kernel_size=kernel_size,
                 r_superpixel=superpixel_rate
             )
-            for in_c, out_c in zip([1]+out_channel, out_channel)
+            for block_i, (in_c, out_c) in enumerate(
+                    zip([1]+out_channel, out_channel))
         ])
 
         # Each output of upsampling block is concat'ed with corresponding
@@ -265,20 +267,21 @@ class Generator(torch.nn.Module):
         # So, double the input channels except the first block.
         self.upsampling_blocks = torch.nn.ModuleList([
              UpsamplingBlock(
-                 in_channels=half_in_c * 2 if block_i > 0 else half_in_c,
+                 in_channels=in_c * superpixel_rate if block_i == 0 else
+                 in_c * superpixel_rate + in_c // superpixel_rate,
                  out_channels=out_c,
                  kernel_size=kernel_size,
                  r_subpixel=superpixel_rate,
                  p_dropout=dropout_p
             )
-            for block_i, (half_in_c, out_c) in enumerate(zip(
+            for block_i, (in_c, out_c) in enumerate(zip(
                     out_channel[::-1],
                     out_channel[-2::-1]+[conv_in_channel]
             ))
         ])
 
         self.conv = torch.nn.Conv1d(
-            conv_in_channel,
+            conv_in_channel // superpixel_rate,
             1,
             conv_kernel_size,
             padding=(conv_kernel_size-1) // 2
@@ -320,13 +323,11 @@ class Discriminator(torch.nn.Module):
         ) -> None:
 
             super(Discriminator.DownsamplingBlock, self).__init__()
-            assert out_channels % (len(kernel_size) * r_superpixel) == 0
-            out_channels_per_conv \
-                = out_channels // (len(kernel_size) * r_superpixel)
+            assert out_channels * r_superpixel % len(kernel_size) == 0
 
             self.multiscale_conv = MultiscaleConv(
-                in_channels, out_channels_per_conv, kernel_size)
-            self.batchnorm = torch.nn.BatchNorm1d(out_channels // r_superpixel)
+                in_channels, out_channels, kernel_size)
+            self.batchnorm = torch.nn.BatchNorm1d(out_channels)
             self.dropout = torch.nn.Dropout(p=p_dropout)
             self.leakyrelu = torch.nn.LeakyReLU()
             self.superpixel = Superpixel(r_superpixel)
@@ -346,22 +347,21 @@ class Discriminator(torch.nn.Module):
             dropout_p : float,
     ) -> None:
         super(Discriminator, self).__init__()
-        assert out_channel[0] % len(kernel_size) == 0
-        out_channels_per_conv = out_channel[0] // len(kernel_size)
 
         self.multiscale_conv = MultiscaleConv(
-            1, out_channels_per_conv, kernel_size)
+            1, out_channel[0], kernel_size)
         self.leakyrelu_1 = torch.nn.LeakyReLU(0.2)
 
         self.downsampling_blocks = torch.nn.ModuleList([
             Discriminator.DownsamplingBlock(
-                in_channels=in_c,
+                in_channels=in_c if block_i == 0 else in_c * superpixel_rate,
                 out_channels=out_c,
                 kernel_size=kernel_size,
                 r_superpixel=superpixel_rate,
                 p_dropout=dropout_p
             )
-            for in_c, out_c in zip(out_channel, out_channel[1:])
+            for block_i, (in_c, out_c) in enumerate(
+                    zip(out_channel, out_channel[1:]))
         ])
         # first multiscale conv. does not perform superpixel
         downsampling_length = ceil(
@@ -370,7 +370,7 @@ class Discriminator(torch.nn.Module):
         # The original paper suggests to use extra linear layer
         # instead of global max pooling.
         # This implementation uses global max pooling due to the
-        # limitation of GPU VRAM memory.
+        # limitation of GPU VRAM.
         """
         self.linear_1 = torch.nn.Linear(
             downsampling_length * out_channel[-1], linear_out_features)
@@ -381,7 +381,7 @@ class Discriminator(torch.nn.Module):
         self.sigmoid = torch.nn.Sigmoid()
         """
 
-        self.linear = torch.nn.Linear(out_channel[-1], 1)
+        self.linear = torch.nn.Linear(out_channel[-1] * superpixel_rate, 1)
         self.sigmoid = torch.nn.Sigmoid()
 
 
@@ -400,6 +400,6 @@ class Discriminator(torch.nn.Module):
         return self.sigmoid(self.linear_2(linear_out)).squeeze(1)
         """
 
-        linear_out = self.linear(downsample_out.mean(dim=-1))
+        linear_out = self.linear(downsample_out.max(dim=-1)[0])
         return self.sigmoid(linear_out)
 

@@ -11,7 +11,7 @@ class ModelTest(unittest.TestCase):
         kernel_size = [3, 9, 27, 81]
         c = models.MultiscaleConv(
             in_channels=3,
-            out_channels_per_conv=2,
+            out_channels=8,
             kernel_size=kernel_size
         )
         self.assertEqual(
@@ -65,7 +65,7 @@ class ModelTest(unittest.TestCase):
         )
 
     def test_downsampling_block(self):
-        out_channels = 8
+        out_channels = 16
         r_superpixel = 2
         block = models.DownsamplingBlock(
             in_channels=2,
@@ -76,14 +76,14 @@ class ModelTest(unittest.TestCase):
 
         self.assertEqual(
             block(torch.rand(8, 2, 50)).shape,
-            torch.Size([8, out_channels, 50 // r_superpixel])
+            torch.Size([8, out_channels * 2, 50 // r_superpixel])
         )
 
     def test_upsampling_block(self):
-        out_channels = 2
+        out_channels = 16
         r_subpixel = 2
         block = models.UpsamplingBlock(
-            in_channels=16,
+            in_channels=2,
             out_channels=out_channels,
             kernel_size=[3, 9, 27, 81],
             r_subpixel=r_subpixel,
@@ -91,8 +91,8 @@ class ModelTest(unittest.TestCase):
         )
 
         self.assertEqual(
-            block(torch.rand(8, 16, 50)).shape,
-            torch.Size([8, out_channels, 50 * r_subpixel])
+            block(torch.rand(8, 2, 50)).shape,
+            torch.Size([8, out_channels // 2, 50 * r_subpixel])
         )
 
     def test_spline(self):
@@ -141,7 +141,7 @@ class ModelTest(unittest.TestCase):
         autoencoder_out = a(x_in)
         self.assertEqual(
             encoder_out.shape,
-            torch.Size([8, 64, 808 // (2**3)])
+            torch.Size([8, 64 * 2, 808 // (2**3)])
         )
         self.assertEqual(
             decoder_out.shape,
@@ -163,7 +163,7 @@ class ModelTest(unittest.TestCase):
         )
         x_in = torch.rand(8, 802)
         self.assertEqual(
-            d(x_in).shape,
+            d(x_in).flatten().shape,
             torch.Size([8])
         )
 
