@@ -15,6 +15,14 @@ To reduce the network size, I replaced that part with a global maxpooling layer.
 - torchaudio 0.5.0
 - resampy 0.2.2
 
+### Quick start
+
+1. Download [pretrained model](https://drive.google.com/file/d/1HcIcn7Kp2SxJvlMZm68GcN2HL1SZLlkQ/view?usp=sharing) (the model is trained for Speaker1 of VCTK dataset (`p225`) for 200 epochs, and performs upsample 8kHz to 16kHz).
+
+2. Run `python 04.extend.py --checkpoint mugan-generator-200.tar --gpu input.wav output.wav` to perform superresolution.
+
+![Output example](/p225_366.png)
+
 ### Usage
 
 #### Setting hyperparameters

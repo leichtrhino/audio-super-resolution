@@ -49,7 +49,8 @@ def main():
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=args.batch_size,
-        shuffle=True
+        shuffle=True,
+        num_workers=4,
     )
 
     if args.validation_dir is not None:
@@ -60,18 +61,27 @@ def main():
         )
         validation_loader = torch.utils.data.DataLoader(
             validation_dataset,
-            batch_size=args.batch_size,
-            shuffle=False
+            batch_size=args.compute_batch_size,
+            shuffle=False,
+            num_workers=4,
         )
 
     # build (and load) a model
     autoencoder = build_model()
+    optimizer = torch.optim.Adam(autoencoder.parameters(), 1e-4)
     if args.checkpoint:
-        autoencoder.load_state_dict(torch.load(args.checkpoint))
+        checkpoint = torch.load(args.checkpoint)
+        autoencoder.load_state_dict(checkpoint['model'])
+        if 'optimizer' in checkpoint:
+            optimizer.load_state_dict(checkpoint['optimizer'])
+
     autoencoder.to(args.device)
+    for state in optimizer.state.values():
+        for k, v in state.items():
+            if type(v) == torch.Tensor:
+                state[k] = v.to(args.device)
 
     loss_function = torch.nn.MSELoss()
-    optimizer = torch.optim.Adam(autoencoder.parameters(), 1e-4)
 
     for epoch in range(1, args.epoch+1):
         sum_loss = 0
@@ -100,6 +110,8 @@ def main():
                 # perform a backward pass
                 loss *= (sample_i_end - sample_i) / batch.shape[0]
                 loss.backward()
+
+            torch.nn.utils.clip_grad_norm_(autoencoder.parameters(), 1e4)
 
             optimizer.step()
 
@@ -136,7 +148,15 @@ def main():
         sys.stdout.write(f'\repoch {epoch} loss={ave_loss} val={ave_val_loss}\n')
 
     autoencoder.to('cpu')
-    torch.save(autoencoder.state_dict(), args.output)
+    for state in optimizer.state.values():
+        for k, v in state.items():
+            if type(v) == torch.Tensor:
+                state[k] = v.to('cpu')
+
+    torch.save({
+        'model': autoencoder.state_dict(),
+        'optimizer': optimizer.state_dict(),
+    }, args.output)
 
 if __name__ == '__main__':
     main()

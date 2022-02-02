@@ -47,7 +47,7 @@ def build_generator():
         conv_in_channel=model_settings.out_conv_in_channel(),
         conv_kernel_size=model_settings.out_conv_kernel(),
         superpixel_rate=2,
-        dropout_p=0.2
+        dropout_p=0.5
     )
 
 def build_discriminator():
@@ -57,7 +57,7 @@ def build_discriminator():
         kernel_size=model_settings.conv_kernel_size(),
         linear_out_features=model_settings.out_linear_features(),
         superpixel_rate=2,
-        dropout_p=0.2
+        dropout_p=0.5
     )
 
 def main():
@@ -72,7 +72,8 @@ def main():
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=args.batch_size,
-        shuffle=True
+        shuffle=True,
+        num_workers=4,
     )
 
     if args.validation_dir is not None:
@@ -83,13 +84,14 @@ def main():
         )
         validation_loader = torch.utils.data.DataLoader(
             validation_dataset,
-            batch_size=args.batch_size,
-            shuffle=False
+            batch_size=args.compute_batch_size,
+            shuffle=False,
+            num_workers=4,
         )
 
     # build (and load) a model
     autoencoder = build_autoencoder()
-    autoencoder.load_state_dict(torch.load(args.autoencoder))
+    autoencoder.load_state_dict(torch.load(args.autoencoder)['model'])
     autoencoder.eval()
     for p in autoencoder.parameters():
         p.requires_grad = False
@@ -97,15 +99,28 @@ def main():
 
     generator = build_generator()
     discriminator = build_discriminator()
+    optimizer_g = torch.optim.Adam(generator.parameters(), 1e-4)
+    optimizer_d = torch.optim.Adam(discriminator.parameters(), 1e-4)
+
     if args.checkpoint:
         checkpoint = torch.load(args.checkpoint)
         generator.load_state_dict(checkpoint['generator'])
+        if 'generator_optimizer':
+            optimizer_g.load_state_dict(checkpoint['generator_optimizer'])
         discriminator.load_state_dict(checkpoint['discriminator'])
-    generator.to(args.device)
-    discriminator.to(args.device)
+        if 'discriminator_optimizer':
+            optimizer_d.load_state_dict(checkpoint['discriminator_optimizer'])
 
-    optimizer_g = torch.optim.Adam(generator.parameters(), 1e-4)
-    optimizer_d = torch.optim.Adam(discriminator.parameters(), 1e-4)
+    generator.to(args.device)
+    for state in optimizer_g.state.values():
+        for k, v in state.items():
+            if type(v) == torch.Tensor:
+                state[k] = v.to(args.device)
+    discriminator.to(args.device)
+    for state in optimizer_d.state.values():
+        for k, v in state.items():
+            if type(v) == torch.Tensor:
+                state[k] = v.to(args.device)
 
     for epoch in range(1, args.epoch+1):
         sum_loss_g = 0
@@ -154,6 +169,7 @@ def main():
                 loss_d *= (sample_i_end - sample_i) / batch.shape[0]
                 loss_d.backward()
 
+            torch.nn.utils.clip_grad_norm_(discriminator.parameters(), 1e4)
             optimizer_d.step()
 
             # train generator
@@ -194,6 +210,7 @@ def main():
                 loss_g *= (sample_i_end - sample_i) / batch.shape[0]
                 loss_g.backward()
 
+            torch.nn.utils.clip_grad_norm_(generator.parameters(), 1e4)
             optimizer_g.step()
 
             # print learning statistics
@@ -264,9 +281,20 @@ def main():
 
     generator.to('cpu')
     discriminator.to('cpu')
+    for state in optimizer_g.state.values():
+        for k, v in state.items():
+            if type(v) == torch.Tensor:
+                state[k] = v.to('cpu')
+    for state in optimizer_d.state.values():
+        for k, v in state.items():
+            if type(v) == torch.Tensor:
+                state[k] = v.to('cpu')
+
     torch.save({
         'generator': generator.state_dict(),
+        'generator_optimizer': optimizer_g.state_dict(),
         'discriminator': discriminator.state_dict(),
+        'discriminator_optimizer': optimizer_d.state_dict(),
     }, args.output)
 
 if __name__ == '__main__':
